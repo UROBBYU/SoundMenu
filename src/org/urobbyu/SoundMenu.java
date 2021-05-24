@@ -6,15 +6,15 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ItemEvent;
 import java.awt.image.BufferedImage;
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.List;
-import java.util.stream.Collectors;
+
+import static org.urobbyu.InputDecoder.*;
 
 /**
  * Sound Menu program
  * @author UROBBYU
- * @version 1.4
+ * @version 1.5
  * @since 1.0
  */
 public class SoundMenu {
@@ -35,6 +35,7 @@ public class SoundMenu {
     private static final MenuItem clearFavoriteItem = new MenuItem("Remove All");
 
     private static boolean isEditMode = false;
+    private static final InputDecoder inputDecoder = new InputDecoder();
 
     /**
      * Start of the program
@@ -117,38 +118,25 @@ public class SoundMenu {
      * Refills <b>appsMenu</b> and <b>favoritesMenu</b>
      */
     private static void refreshAppsMenu() {
-        favoritesMenu.removeAll();
-        appsMenu.removeAll();
-
-        Runtime runtime = Runtime.getRuntime();
-
-        // Getting list of apps
-        String[] commands = {
-                "cmd",
-                "/c",
-                "SoundVolumeView.exe /stab \"\" | GetNir.exe Name,ProcessID,ProcessPath,ItemID \"Direction=Render && Type=Application && ProcessID!=''\""
-        };
-        Process proc = null;
-        try {
-            proc = runtime.exec(commands);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        assert proc != null;
-        BufferedReader stdInput = new BufferedReader(new InputStreamReader(proc.getInputStream()));
         List<String> processNames = new ArrayList<>();
         List<String> processIds = new ArrayList<>();
         List<String> processPaths = new ArrayList<>();
         List<String> processDevices = new ArrayList<>();
+        List<String> deviceNames = new ArrayList<>();
+        List<String> deviceIds = new ArrayList<>();
+        List<String> deviceSubNames = new ArrayList<>();
 
-        for (String s : stdInput.lines().collect(Collectors.toList())) {
-            String[] comb = s.split("\t");
+        favoritesMenu.removeAll();
+        appsMenu.removeAll();
+
+        // Getting list of apps
+        for (String[] comb : getAppList()) {
             String id = comb[1];
             int index;
             if ((index = processIds.indexOf(id)) != -1) {
                 processDevices.set(index, "undefined");
             } else {
-                processNames.add(new String(comb[0].getBytes(), StandardCharsets.UTF_8));
+                processNames.add(comb[0]);
                 processIds.add(id);
                 processPaths.add(comb[2]);
                 processDevices.add(comb[3].split("\\|")[0]);
@@ -156,19 +144,7 @@ public class SoundMenu {
         }
 
         // Getting list of devices
-        commands[2] = "SoundVolumeView.exe /stab \"\" | GetNir.exe Name,ItemID,DeviceName \"Direction=Render && Type=Device && DeviceState=Active\"";
-        try {
-            proc = runtime.exec(commands);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        stdInput = new BufferedReader(new InputStreamReader(proc.getInputStream()));
-        List<String> deviceNames = new ArrayList<>();
-        List<String> deviceIds = new ArrayList<>();
-        List<String> deviceSubNames = new ArrayList<>();
-
-        for (String s : stdInput.lines().collect(Collectors.toList())) {
-            String[] comb = s.split("\t");
+        for (String[] comb : getDeviceList()) {
             deviceNames.add(comb[0]);
             deviceIds.add(comb[1]);
             deviceSubNames.add(comb[2]);
@@ -202,15 +178,7 @@ public class SoundMenu {
                             favorites.setProperty("device" + index, deviceIds.get(dI));
                         }
 
-                        (new Thread(() -> {
-                            try {
-                                Thread.sleep(200);
-                            } catch (InterruptedException ie) {
-                                ie.printStackTrace();
-                            }
-
-                            refreshAppsMenu();
-                        })).start();
+                        (new Thread(() -> { try { Thread.sleep(200); } catch (InterruptedException ignored) { } refreshAppsMenu(); })).start();
                     } else
                         switchDevice(processIds.get(pI), deviceIds.get(dI));
                 });
@@ -264,25 +232,9 @@ public class SoundMenu {
                 final int index = i;
                 if (appIndex != -1) favoriteDeviceItem.addActionListener(e -> {
                     if (isEditMode) {
-                        for (int j = index; j < favorites.size() / 2; j++) {
-                            favorites.setProperty("app" + j, favorites.getProperty("app" + (j + 1)));
-                            favorites.setProperty("device" + j, favorites.getProperty("device" + (j + 1)));
-                        }
+                        removeFavProperty(index);
 
-                        int n = favorites.size() / 2;
-
-                        favorites.remove("app" + n);
-                        favorites.remove("device" + n);
-
-                        (new Thread(() -> {
-                            try {
-                                Thread.sleep(200);
-                            } catch (InterruptedException ie) {
-                                ie.printStackTrace();
-                            }
-
-                            refreshAppsMenu();
-                        })).start();
+                        (new Thread(() -> { try { Thread.sleep(200); } catch (InterruptedException ignored) { } refreshAppsMenu(); })).start();
                     } else
                         switchDevice(processIds.get(appIndex), deviceIds.get(deviceIndex));
                 });
@@ -303,28 +255,12 @@ public class SoundMenu {
 
                     for (int index = 1; index <= favorites.size() / 2; index++) {
                         if (favorites.getProperty("app" + index).equals(appPath)) {
-                            for (int j = index; j < favorites.size() / 2; j++) {
-                                favorites.setProperty("app" + j, favorites.getProperty("app" + (j + 1)));
-                                favorites.setProperty("device" + j, favorites.getProperty("device" + (j + 1)));
-                            }
-
-                            int n = favorites.size() / 2;
-
-                            favorites.remove("app" + n);
-                            favorites.remove("device" + n);
+                            removeFavProperty(index);
                             index--;
                         }
                     }
 
-                    (new Thread(() -> {
-                        try {
-                            Thread.sleep(200);
-                        } catch (InterruptedException ie) {
-                            ie.printStackTrace();
-                        }
-
-                        refreshAppsMenu();
-                    })).start();
+                    (new Thread(() -> { try { Thread.sleep(200); } catch (InterruptedException ignored) { } refreshAppsMenu(); })).start();
                 });
             }
         }
@@ -333,6 +269,56 @@ public class SoundMenu {
         favoritesMenu.addSeparator();
         favoritesMenu.add(editFavoriteItem);
         favoritesMenu.add(clearFavoriteItem);
+    }
+
+    /**
+     * Removes element from favorites by it's index
+     * @param index index
+     */
+    private static void removeFavProperty(int index) {
+        for (int j = index; j < favorites.size() / 2; j++) {
+            favorites.setProperty("app" + j, favorites.getProperty("app" + (j + 1)));
+            favorites.setProperty("device" + j, favorites.getProperty("device" + (j + 1)));
+        }
+
+        int n = favorites.size() / 2;
+
+        favorites.remove("app" + n);
+        favorites.remove("device" + n);
+    }
+
+    /**
+     * Filtering <b>InputDecoder</b> to get only applications
+     * @return list of application's properties
+     */
+    private static List<String[]> getAppList() {
+        List<String[]> ret = new ArrayList<>();
+
+        for (int i = 0; i < inputDecoder.size(); i++) {
+            String[] row = inputDecoder.getRow(i);
+            if (row[iDirection].equals("Render") && row[iType].equals("Application") && !row[iProcessID].equals("")) {
+                ret.add(new String[]{row[iName], row[iProcessID], row[iProcessPath], row[iItemID]});
+            }
+        }
+
+        return ret;
+    }
+
+    /**
+     * Filtering <b>InputDecoder</b> to get only devices
+     * @return list of device's properties
+     */
+    private static List<String[]> getDeviceList() {
+        List<String[]> ret = new ArrayList<>();
+
+        for (int i = 0; i < inputDecoder.size(); i++) {
+            String[] row = inputDecoder.getRow(i);
+            if (row[iDirection].equals("Render") && row[iType].equals("Device") && row[iDeviceState].equals("Active")) {
+                ret.add(new String[]{row[iName], row[iItemID], row[iDeviceName]});
+            }
+        }
+
+        return ret;
     }
 
     /**
@@ -347,15 +333,7 @@ public class SoundMenu {
             e.printStackTrace();
         }
 
-        (new Thread(() -> {
-            try {
-                Thread.sleep(200);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-
-            refreshAppsMenu();
-        })).start();
+        (new Thread(() -> { try { Thread.sleep(200); } catch (InterruptedException ignored) { } refreshAppsMenu(); })).start();
     }
 
     /**
@@ -395,14 +373,11 @@ public class SoundMenu {
         @Override
         public void run() {
             super.run();
-
-            while (doRun) {
-                try {
-                    Thread.sleep(30000);
-
-                    refreshAppsMenu();
-                } catch (InterruptedException ignored) { }
-            }
+            try {
+                Thread.sleep(30000);
+                refreshAppsMenu();
+                if (doRun) run();
+            } catch (InterruptedException ignored) { }
         }
     }
 }

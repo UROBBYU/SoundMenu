@@ -14,7 +14,7 @@ import static org.urobbyu.InputDecoder.*;
 /**
  * Sound Menu program
  * @author UROBBYU
- * @version 1.5
+ * @version 1.6
  * @since 1.0
  */
 public class SoundMenu {
@@ -128,6 +128,7 @@ public class SoundMenu {
 
         favoritesMenu.removeAll();
         appsMenu.removeAll();
+        inputDecoder.reload();
 
         // Getting list of apps
         for (String[] comb : getAppList()) {

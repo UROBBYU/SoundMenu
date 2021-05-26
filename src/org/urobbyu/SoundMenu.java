@@ -2,8 +2,7 @@ package org.urobbyu;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ItemEvent;
+import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.util.*;
@@ -19,10 +18,9 @@ import static org.urobbyu.InputDecoder.*;
  */
 public class SoundMenu {
     private static final Properties favorites = new Properties();
-
     private static final Refresher refresher = new Refresher();
-
-    private static final PopupMenu popup = new PopupMenu();
+    private static final PopupMenu mainPopup = new PopupMenu();
+    private static final PopupMenu favPopup = new PopupMenu();
 
     private static final Menu appsMenu = new Menu("Apps");
     private static final Menu favoritesMenu = new Menu("Favorites");
@@ -30,18 +28,28 @@ public class SoundMenu {
     private static final MenuItem settingsItem = new MenuItem("Sound Settings");
     private static final MenuItem soundVolumeViewItem = new MenuItem("SoundVolumeView");
     private static final MenuItem exitItem = new MenuItem("Exit");
-
     private static final MenuItem editFavoriteItem = new MenuItem("Edit");
     private static final MenuItem clearFavoriteItem = new MenuItem("Remove All");
 
+    private static final TrayIcon trayIcon = new TrayIcon(loadIcon("icon.png"), "Sound Menu", favPopup);
+
+    private static final List<String> processNames = new ArrayList<>();
+    private static final List<String> processIds = new ArrayList<>();
+    private static final List<String> processPaths = new ArrayList<>();
+    private static final List<String> processDevices = new ArrayList<>();
+    private static final List<String> deviceNames = new ArrayList<>();
+    private static final List<String> deviceIds = new ArrayList<>();
+    private static final List<String> deviceSubNames = new ArrayList<>();
+
     private static boolean isEditMode = false;
+    private static boolean isFavMode = true;
     private static final InputDecoder inputDecoder = new InputDecoder();
 
     /**
      * Start of the program
      * @param args console arguments
      */
-    public static void main(String[] args) throws AWTException, IOException {
+    public static void main(String[] args) throws AWTException {
         try {
             favorites.load(new FileInputStream("config.properties"));
         } catch (IOException ignored) {}
@@ -49,34 +57,35 @@ public class SoundMenu {
         // Checking if system supports the whole thing i'm trying to do
         if (!SystemTray.isSupported()) return;
 
-        // Loading icon image
-        BufferedImage img = ImageIO.read(ClassLoader.getSystemResource("icon.png"));
-
         // Getting SystemTray instance
         SystemTray systemTray = SystemTray.getSystemTray();
 
         // Building icon menu
 
+        refreshData();
         refreshAppsMenu();
+        refreshFavorites();
 
-        popup.add(favoritesMenu);
-        popup.addSeparator();
-        popup.add(appsMenu);
-        popup.addSeparator();
-        popup.add(refreshItem);
-        popup.addSeparator();
-        popup.add(settingsItem);
-        popup.add(soundVolumeViewItem);
-        popup.addSeparator();
-        popup.add(exitItem);
-
-        assert img != null;
-        TrayIcon trayIcon = new TrayIcon(img.getScaledInstance(Math.round(16 * Toolkit.getDefaultToolkit().getScreenResolution() / 96f), -1, Image.SCALE_SMOOTH), "Sound Menu", popup);
+        mainPopup.add(favoritesMenu);
+        mainPopup.addSeparator();
+        mainPopup.add(appsMenu);
+        mainPopup.addSeparator();
+        mainPopup.add(refreshItem);
+        mainPopup.addSeparator();
+        mainPopup.add(settingsItem);
+        mainPopup.add(soundVolumeViewItem);
+        mainPopup.addSeparator();
+        mainPopup.add(exitItem);
 
         trayIcon.setImageAutoSize(true);
 
         // Setting up action handlers
-        refreshItem.addActionListener(e -> refreshAppsMenu());
+        refreshItem.addActionListener(e -> {
+            inputDecoder.reload();
+            refreshData();
+            refreshAppsMenu();
+            refreshFavorites();
+        });
         settingsItem.addActionListener(e -> openApp(true));
         soundVolumeViewItem.addActionListener(e -> openApp(false));
         exitItem.addActionListener(e -> {
@@ -91,15 +100,30 @@ public class SoundMenu {
         });
         clearFavoriteItem.addActionListener(e -> {
             favorites.clear();
-            refreshAppsMenu();
+            refreshFavorites();
         });
         editFavoriteItem.addActionListener(SoundMenu::switchEditMode);
+        trayIcon.addActionListener(SoundMenu::switchFavMode);
 
         // Adding my icon program to system tray
         systemTray.add(trayIcon);
 
         // Setting automatic application list refresher to refresh it every 30 seconds
         refresher.start();
+    }
+
+    /**
+     * Loads an image from system resources
+     */
+    private static Image loadIcon(String filename) {
+        BufferedImage img = null;
+        try {
+            img = ImageIO.read(ClassLoader.getSystemResource(filename));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        assert img != null;
+        return img.getScaledInstance(Math.round(16 * Toolkit.getDefaultToolkit().getScreenResolution() / 96f), -1, Image.SCALE_SMOOTH);
     }
 
     /**
@@ -112,23 +136,39 @@ public class SoundMenu {
         isEditMode = !isEditMode;
 
         refreshAppsMenu();
+        refreshFavorites();
     }
 
     /**
-     * Refills <b>appsMenu</b> and <b>favoritesMenu</b>
+     * Turns favorite mode on and off
+     * @param e unused
      */
-    private static void refreshAppsMenu() {
-        List<String> processNames = new ArrayList<>();
-        List<String> processIds = new ArrayList<>();
-        List<String> processPaths = new ArrayList<>();
-        List<String> processDevices = new ArrayList<>();
-        List<String> deviceNames = new ArrayList<>();
-        List<String> deviceIds = new ArrayList<>();
-        List<String> deviceSubNames = new ArrayList<>();
+    private static void switchFavMode(ActionEvent e) {
+        if (isFavMode) {
+            trayIcon.setImage(loadIcon("icon_orange.png"));
+            trayIcon.setPopupMenu(mainPopup);
+        }
+        else {
+            if (isEditMode) switchEditMode(null);
+            trayIcon.setImage(loadIcon("icon.png"));
+            trayIcon.setPopupMenu(favPopup);
+        }
+        isFavMode = !isFavMode;
 
-        favoritesMenu.removeAll();
-        appsMenu.removeAll();
-        inputDecoder.reload();
+        refreshFavorites();
+    }
+
+    /**
+     * Processes data retrieved from <b>InputDecoder</b>
+     */
+    private static void refreshData() {
+        processNames.clear();
+        processIds.clear();
+        processPaths.clear();
+        processDevices.clear();
+        deviceNames.clear();
+        deviceIds.clear();
+        deviceSubNames.clear();
 
         // Getting list of apps
         for (String[] comb : getAppList()) {
@@ -150,8 +190,14 @@ public class SoundMenu {
             deviceIds.add(comb[1]);
             deviceSubNames.add(comb[2]);
         }
+    }
 
-        // Filling Apps Menu
+    /**
+     * Refills <b>appsMenu</b>
+     */
+    private static void refreshAppsMenu() {
+        appsMenu.removeAll();
+
         for (int i = 0; i < processNames.size(); i++) {
             final int pI = i;
             Menu appMenu = new Menu(processNames.get(i) + " (" + processIds.get(i) + ")");
@@ -164,7 +210,7 @@ public class SoundMenu {
                 final int dI = j;
                 MenuItem deviceItem = new MenuItem(deviceNames.get(j) + " (" + deviceSubNames.get(j) + ")");
 
-                deviceItem.setEnabled(!(processDevices.get(i).equals(deviceIds.get(j))));
+                deviceItem.setEnabled(!(processDevices.get(i).equals(deviceIds.get(j))) || isEditMode);
 
                 deviceItem.addActionListener(e -> {
                     if (isEditMode) {
@@ -179,7 +225,7 @@ public class SoundMenu {
                             favorites.setProperty("device" + index, deviceIds.get(dI));
                         }
 
-                        (new Thread(() -> { try { Thread.sleep(200); } catch (InterruptedException ignored) { } refreshAppsMenu(); })).start();
+                        refreshFavorites();
                     } else
                         switchDevice(processIds.get(pI), deviceIds.get(dI));
                 });
@@ -192,8 +238,15 @@ public class SoundMenu {
             appMenu.add(muteFlag);
             appsMenu.add(appMenu);
         }
+    }
 
-        // Refilling Favorites Menu
+    /**
+     * Refills <b>favoritesMenu</b> and <b>favPopup</b>
+     */
+    private static void refreshFavorites() {
+        favoritesMenu.removeAll();
+        favPopup.removeAll();
+
         List<String> addedMenus = new ArrayList<>();
         List<Object> keys = Collections.list(favorites.keys());
         List<Object> values = Collections.list(favorites.elements());
@@ -219,6 +272,7 @@ public class SoundMenu {
                     favoriteAppMenu.setLabel(processNames.get(appIndex));
                 favoriteAppMenu.setName(appPath);
                 addedMenus.add(appPath);
+                if (favoritesMenu.getItemCount() > 0) favoritesMenu.addSeparator();
                 favoritesMenu.add(favoriteAppMenu);
             }
 
@@ -235,12 +289,13 @@ public class SoundMenu {
                     if (isEditMode) {
                         removeFavProperty(index);
 
-                        (new Thread(() -> { try { Thread.sleep(200); } catch (InterruptedException ignored) { } refreshAppsMenu(); })).start();
+                        refreshFavorites();
                     } else
                         switchDevice(processIds.get(appIndex), deviceIds.get(deviceIndex));
                 });
             }
 
+            if (favoriteAppMenu.getItemCount() > 0) favoriteAppMenu.addSeparator();
             favoriteAppMenu.add(favoriteDeviceItem);
         }
 
@@ -261,15 +316,22 @@ public class SoundMenu {
                         }
                     }
 
-                    (new Thread(() -> { try { Thread.sleep(200); } catch (InterruptedException ignored) { } refreshAppsMenu(); })).start();
+                    refreshFavorites();
                 });
             }
         }
 
-        // Adding Edit and Remove All Menu Items
-        favoritesMenu.addSeparator();
-        favoritesMenu.add(editFavoriteItem);
-        favoritesMenu.add(clearFavoriteItem);
+        if (isFavMode) {
+            // Refilling Favorites Popup
+            for (int i = 0; i < favoritesMenu.getItemCount(); i++) {
+                favPopup.add(favoritesMenu.getItem(i));
+            }
+        } else {
+            // Adding Edit and Remove All Menu Items
+            favoritesMenu.addSeparator();
+            favoritesMenu.add(editFavoriteItem);
+            favoritesMenu.add(clearFavoriteItem);
+        }
     }
 
     /**
@@ -334,7 +396,9 @@ public class SoundMenu {
             e.printStackTrace();
         }
 
-        (new Thread(() -> { try { Thread.sleep(200); } catch (InterruptedException ignored) { } refreshAppsMenu(); })).start();
+        refreshData();
+        refreshAppsMenu();
+        refreshFavorites();
     }
 
     /**
@@ -376,7 +440,10 @@ public class SoundMenu {
             super.run();
             try {
                 Thread.sleep(30000);
+                inputDecoder.reload();
+                refreshData();
                 refreshAppsMenu();
+                refreshFavorites();
                 if (doRun) run();
             } catch (InterruptedException ignored) { }
         }

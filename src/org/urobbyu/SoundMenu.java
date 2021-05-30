@@ -13,12 +13,13 @@ import static org.urobbyu.InputDecoder.*;
 /**
  * Sound Menu program
  * @author UROBBYU
- * @version 1.6
+ * @version 1.7
  * @since 1.0
  */
 public class SoundMenu {
     private static final Properties favorites = new Properties();
     private static final Refresher refresher = new Refresher();
+    private static final Shutdowner shutdowner = new Shutdowner();
     private static final PopupMenu mainPopup = new PopupMenu();
     private static final PopupMenu favPopup = new PopupMenu();
 
@@ -61,11 +62,11 @@ public class SoundMenu {
         SystemTray systemTray = SystemTray.getSystemTray();
 
         // Building icon menu
-
         refreshData();
         refreshAppsMenu();
         refreshFavorites();
 
+        mainPopup.addSeparator();
         mainPopup.add(favoritesMenu);
         mainPopup.addSeparator();
         mainPopup.add(appsMenu);
@@ -76,8 +77,11 @@ public class SoundMenu {
         mainPopup.add(soundVolumeViewItem);
         mainPopup.addSeparator();
         mainPopup.add(exitItem);
+        mainPopup.addSeparator();
 
         trayIcon.setImageAutoSize(true);
+        makeBold(exitItem, favoritesMenu, appsMenu, favPopup);
+        makePlain(editFavoriteItem, clearFavoriteItem);
 
         // Setting up action handlers
         refreshItem.addActionListener(e -> {
@@ -88,16 +92,8 @@ public class SoundMenu {
         });
         settingsItem.addActionListener(e -> openApp(true));
         soundVolumeViewItem.addActionListener(e -> openApp(false));
-        exitItem.addActionListener(e -> {
-            refresher.doRun = false;
-            refresher.interrupt();
-            try {
-                favorites.store(new FileOutputStream("config.properties"), null);
-            } catch (IOException fileNotFoundException) {
-                fileNotFoundException.printStackTrace();
-            }
-            systemTray.remove(trayIcon);
-        });
+        Runtime.getRuntime().addShutdownHook(shutdowner);
+        exitItem.addActionListener(shutdowner);
         clearFavoriteItem.addActionListener(e -> {
             favorites.clear();
             refreshFavorites();
@@ -111,6 +107,18 @@ public class SoundMenu {
         // Setting automatic application list refresher to refresh it every 30 seconds
         refresher.start();
     }
+
+    /**
+     * Sets menu item's font style to bold
+     * @param components menu items
+     */
+    private static void makeBold(MenuComponent... components) { for (MenuComponent c : components) c.setFont(new Font(Font.DIALOG, Font.BOLD, 12)); }
+
+    /**
+     * Sets menu item's font style to bold
+     * @param components menu items
+     */
+    private static void makePlain(MenuComponent... components) { for (MenuComponent c : components) c.setFont(new Font(Font.DIALOG, Font.PLAIN, 12)); }
 
     /**
      * Loads an image from system resources
@@ -198,11 +206,16 @@ public class SoundMenu {
     private static void refreshAppsMenu() {
         appsMenu.removeAll();
 
+        appsMenu.addSeparator();
+
         for (int i = 0; i < processNames.size(); i++) {
             final int pI = i;
             Menu appMenu = new Menu(processNames.get(i) + " (" + processIds.get(i) + ")");
             Menu devicesMenu = new Menu("Output Device");
             CheckboxMenuItem muteFlag = new CheckboxMenuItem("Mute");
+
+            appMenu.addSeparator();
+            devicesMenu.addSeparator();
 
             muteFlag.addItemListener(e -> muteApp(processIds.get(pI), e.getStateChange()));
 
@@ -233,11 +246,15 @@ public class SoundMenu {
                 devicesMenu.add(deviceItem);
             }
 
+            devicesMenu.addSeparator();
+
             appMenu.add(devicesMenu);
             appMenu.addSeparator();
             appMenu.add(muteFlag);
+            appMenu.addSeparator();
             appsMenu.add(appMenu);
         }
+        appsMenu.addSeparator();
     }
 
     /**
@@ -299,11 +316,15 @@ public class SoundMenu {
             favoriteAppMenu.add(favoriteDeviceItem);
         }
 
-        if (isEditMode) {
-            for (int i = 0; i < favoritesMenu.getItemCount(); i++) {
-                MenuItem deleteFavoriteAppItem = new MenuItem("Delete All");
-                Menu curFavMenu = (Menu) favoritesMenu.getItem(i);
+        for (int i = 0; i < favoritesMenu.getItemCount(); i++) {
+            Menu curFavMenu = (Menu) favoritesMenu.getItem(i);
 
+            if (isEditMode) {
+                MenuItem deleteFavoriteAppItem = new MenuItem("Delete All");
+
+                makePlain(deleteFavoriteAppItem);
+
+                curFavMenu.addSeparator();
                 curFavMenu.add(deleteFavoriteAppItem);
 
                 deleteFavoriteAppItem.addActionListener(e -> {
@@ -319,19 +340,27 @@ public class SoundMenu {
                     refreshFavorites();
                 });
             }
+
+            curFavMenu.insertSeparator(0);
+            curFavMenu.addSeparator();
         }
 
         if (isFavMode) {
             // Refilling Favorites Popup
+            favPopup.addSeparator();
             for (int i = 0; i < favoritesMenu.getItemCount(); i++) {
                 favPopup.add(favoritesMenu.getItem(i));
             }
+            favPopup.addSeparator();
         } else {
             // Adding Edit and Remove All Menu Items
             favoritesMenu.addSeparator();
             favoritesMenu.add(editFavoriteItem);
             favoritesMenu.add(clearFavoriteItem);
         }
+
+        favoritesMenu.insertSeparator(0);
+        favoritesMenu.addSeparator();
     }
 
     /**
@@ -446,6 +475,28 @@ public class SoundMenu {
                 refreshFavorites();
                 if (doRun) run();
             } catch (InterruptedException ignored) { }
+        }
+    }
+
+    /**
+     * Thread that performs correct program exit
+     */
+    private static class Shutdowner extends Thread implements ActionListener {
+        @Override
+        public void run() {
+            refresher.doRun = false;
+            refresher.interrupt();
+            try {
+                favorites.store(new FileOutputStream("config.properties"), null);
+            } catch (IOException fileNotFoundException) {
+                fileNotFoundException.printStackTrace();
+            }
+            SystemTray.getSystemTray().remove(trayIcon);
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            start();
         }
     }
 }

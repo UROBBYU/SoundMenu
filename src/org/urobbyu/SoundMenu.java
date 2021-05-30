@@ -214,6 +214,8 @@ public class SoundMenu {
             Menu devicesMenu = new Menu("Output Device");
             CheckboxMenuItem muteFlag = new CheckboxMenuItem("Mute");
 
+            makePlain(muteFlag);
+
             appMenu.addSeparator();
             devicesMenu.addSeparator();
 
@@ -348,13 +350,23 @@ public class SoundMenu {
         if (isFavMode) {
             // Refilling Favorites Popup
             favPopup.addSeparator();
+
             for (int i = 0; i < favoritesMenu.getItemCount(); i++) {
                 favPopup.add(favoritesMenu.getItem(i));
             }
+
+            if (favPopup.getItemCount() == 1) {
+                MenuItem emptyItem = new MenuItem("Switch mode");
+
+                emptyItem.addActionListener(SoundMenu::switchFavMode);
+
+                favPopup.add(emptyItem);
+            }
+
             favPopup.addSeparator();
         } else {
             // Adding Edit and Remove All Menu Items
-            favoritesMenu.addSeparator();
+            if (favoritesMenu.getItemCount() > 1) favoritesMenu.addSeparator();
             favoritesMenu.add(editFavoriteItem);
             favoritesMenu.add(clearFavoriteItem);
         }

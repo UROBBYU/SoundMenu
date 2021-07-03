@@ -1,1 +1,1 @@
-start bin\javaw -m SoundMenu/org.urobbyu.SoundMenu %*
+bin\java -m SoundMenu/org.urobbyu.SoundMenu %*

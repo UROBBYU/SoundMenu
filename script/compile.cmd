@@ -5,6 +5,5 @@ copy script\start.cmd out\build\SoundMenu
 copy SoundVolumeView.exe out\build\SoundMenu
 copy icon.ico out\build\SoundMenu
 cd out\build\
-del /f SoundMenu\bin\java.exe
 "C:\Program Files\7-Zip\7z" a -tzip ..\zips\SoundMenu SoundMenu\*
 exit

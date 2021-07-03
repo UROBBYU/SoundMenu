@@ -14,6 +14,7 @@ public class InputDecoder {
     private String[] propNames;
 
     public static int iName;
+    public static int iMuted;
     public static int iProcessID;
     public static int iProcessPath;
     public static int iItemID;
@@ -43,6 +44,7 @@ public class InputDecoder {
             iType = getPropertyIndex("Type");
             iDeviceName = getPropertyIndex("Device Name");
             iDeviceState = getPropertyIndex("Device State");
+            iMuted = getPropertyIndex("Muted");
             iName = getPropertyIndex("\uFEFFName");
 
         } catch (IOException e) { e.printStackTrace(); }

@@ -36,6 +36,7 @@ public class SoundMenu {
     private static final TrayIcon trayIcon = new TrayIcon(loadIcon("icon.png"), "Sound Menu", favPopup);
 
     private static final List<String> processNames = new ArrayList<>();
+    private static final List<String> processMuted = new ArrayList<>();
     private static final List<String> processIds = new ArrayList<>();
     private static final List<String> processPaths = new ArrayList<>();
     private static final List<String> processDevices = new ArrayList<>();
@@ -280,6 +281,7 @@ public class SoundMenu {
      */
     private static void refreshData() {
         processNames.clear();
+        processMuted.clear();
         processIds.clear();
         processPaths.clear();
         processDevices.clear();
@@ -289,15 +291,16 @@ public class SoundMenu {
 
         // Getting list of apps
         for (String[] comb : getAppList()) {
-            String id = comb[1];
+            String id = comb[2];
             int index;
             if ((index = processIds.indexOf(id)) != -1) {
                 processDevices.set(index, "undefined");
             } else {
                 processNames.add(comb[0]);
+                processMuted.add(comb[1]);
                 processIds.add(id);
-                processPaths.add(comb[2]);
-                processDevices.add(comb[3].split("\\|")[0]);
+                processPaths.add(comb[3]);
+                processDevices.add(comb[4].split("\\|")[0]);
             }
         }
 
@@ -321,7 +324,7 @@ public class SoundMenu {
             final int pI = i;
             Menu appMenu = new Menu(processNames.get(i) + " (" + processIds.get(i) + ")");
             Menu devicesMenu = new Menu("Output Device");
-            CheckboxMenuItem muteFlag = new CheckboxMenuItem("Mute");
+            CheckboxMenuItem muteFlag = new CheckboxMenuItem("Mute", processMuted.get(i).equals("Yes"));
 
             makePlain(muteFlag);
 
@@ -512,7 +515,7 @@ public class SoundMenu {
         for (int i = 0; i < inputDecoder.size(); i++) {
             String[] row = inputDecoder.getRow(i);
             if (row[iDirection].equals("Render") && row[iType].equals("Application") && !row[iProcessID].equals("")) {
-                ret.add(new String[]{row[iName], row[iProcessID], row[iProcessPath], row[iItemID]});
+                ret.add(new String[]{row[iName], row[iMuted], row[iProcessID], row[iProcessPath], row[iItemID]});
             }
         }
 

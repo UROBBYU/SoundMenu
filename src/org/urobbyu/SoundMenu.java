@@ -5,6 +5,7 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
+import java.text.ParseException;
 import java.util.*;
 import java.util.List;
 
@@ -42,8 +43,17 @@ public class SoundMenu {
     private static final List<String> deviceIds = new ArrayList<>();
     private static final List<String> deviceSubNames = new ArrayList<>();
 
+    private static boolean noFav = false;
+    private static boolean isFullMenu = false;
+    private static boolean loadFav = true;
+    private static boolean saveFav = true;
+    private static boolean includeOptions = true;
+    private static boolean doubleClickSwitch = true;
+    private static boolean showHelp = false;
+
     private static boolean isEditMode = false;
     private static boolean isFavMode = true;
+
     private static final InputDecoder inputDecoder = new InputDecoder();
 
     /**
@@ -52,7 +62,17 @@ public class SoundMenu {
      */
     public static void main(String[] args) throws AWTException {
         try {
-            favorites.load(new FileInputStream("config.properties"));
+            parseArgs(args);
+
+            if (showHelp) {
+                showHelp();
+                return;
+            }
+
+            if (loadFav) favorites.load(new FileInputStream("config.properties"));
+        } catch (ParseException parseException) {
+            System.out.println(parseException.getMessage());
+            return;
         } catch (IOException ignored) {}
 
         // Checking if system supports the whole thing i'm trying to do
@@ -66,15 +86,22 @@ public class SoundMenu {
         refreshAppsMenu();
         refreshFavorites();
 
-        mainPopup.addSeparator();
-        mainPopup.add(favoritesMenu);
+        if (!noFav) {
+            mainPopup.addSeparator();
+            mainPopup.add(favoritesMenu);
+        }
+
         mainPopup.addSeparator();
         mainPopup.add(appsMenu);
         mainPopup.addSeparator();
         mainPopup.add(refreshItem);
-        mainPopup.addSeparator();
-        mainPopup.add(settingsItem);
-        mainPopup.add(soundVolumeViewItem);
+
+        if (includeOptions) {
+            mainPopup.addSeparator();
+            mainPopup.add(settingsItem);
+            mainPopup.add(soundVolumeViewItem);
+        }
+
         mainPopup.addSeparator();
         mainPopup.add(exitItem);
         mainPopup.addSeparator();
@@ -90,22 +117,104 @@ public class SoundMenu {
             refreshAppsMenu();
             refreshFavorites();
         });
-        settingsItem.addActionListener(e -> openApp(true));
-        soundVolumeViewItem.addActionListener(e -> openApp(false));
+
+        if (includeOptions) {
+            settingsItem.addActionListener(e -> openApp(true));
+
+            soundVolumeViewItem.addActionListener(e -> openApp(false));
+        }
+
         Runtime.getRuntime().addShutdownHook(shutdowner);
         exitItem.addActionListener(shutdowner);
+
         clearFavoriteItem.addActionListener(e -> {
             favorites.clear();
             refreshFavorites();
         });
+
         editFavoriteItem.addActionListener(SoundMenu::switchEditMode);
-        trayIcon.addActionListener(SoundMenu::switchFavMode);
+
+        if (doubleClickSwitch)
+            trayIcon.addActionListener(SoundMenu::switchFavMode);
+        else
+            trayIcon.addActionListener(shutdowner);
+
+        if (isFullMenu) switchFavMode(null);
 
         // Adding my icon program to system tray
         systemTray.add(trayIcon);
 
         // Setting automatic application list refresher to refresh it every 30 seconds
         refresher.start();
+    }
+
+    /**
+     * Parses program arguments
+     * @param args arguments
+     * @throws ParseException thrown if any argument is invalid
+     */
+    private static void parseArgs(String[] args) throws ParseException {
+        List<String> s = new ArrayList<>();
+
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i].toLowerCase();
+
+            if (arg.matches("--.+")) arg = arg.substring(2);
+            else if (arg.matches("(/|-).+")) arg = arg.substring(1);
+            else throw new ParseException("Invalid argument prefix: " + arg, i);
+
+            switch (arg) {
+                case "fm":
+                case "nfl":
+                case "nfs":
+                case "nf":
+                case "no":
+                case "se":
+                case "?":
+                case "help":
+                    if (!s.contains(arg)) s.add(arg);
+                    break;
+                default:
+                    throw new ParseException("Invalid argument: " + arg, i);
+            }
+        }
+
+        if (s.contains("?") || s.contains("help")) showHelp = true;
+
+        if (s.contains("nf")) noFav = true;
+
+        if (s.contains("nfl") || noFav) loadFav = false;
+
+        if (s.contains("nfs") || noFav) saveFav = false;
+
+        if (s.contains("no")) includeOptions = false;
+
+        if (s.contains("se") || noFav) doubleClickSwitch = false;
+
+        if (s.contains("fm") || noFav) isFullMenu = true;
+    }
+
+    /**
+     * Shows help console message
+     */
+    private static void showHelp() {
+        System.out.println(
+            "start.cmd [-nf | (-nfl | -nfs | -se | -fm)] [-no]\n\n" +
+            "Description:\n" +
+            "   Little sound mapping java tray application.\n\n" +
+            "Argument List:\n" +
+            "   -nfl    Disables favorites file loading.\n\n" +
+            "   -nfs    Disables favorites file saving.\n\n" +
+            "   -se     Disables double-click Favorite Mode switching.\n" +
+            "           Instead it closes the application.\n\n" +
+            "   -fm     Initially loads application in Full Mode.\n\n" +
+            "   -nf     Disables favorites entirely.\n\n" +
+            "   -no     Hides 'Sound Settings' and 'SoundVolumeView'.\n\n" +
+            "Examples:\n" +
+            "   start.cmd -nf\n" +
+            "   start.cmd /nf --no\n" +
+            "   start.cmd -nfl /nfs --se -fm /no"
+        );
     }
 
     /**
@@ -263,116 +372,118 @@ public class SoundMenu {
      * Refills <b>favoritesMenu</b> and <b>favPopup</b>
      */
     private static void refreshFavorites() {
-        favoritesMenu.removeAll();
-        favPopup.removeAll();
+        if (!noFav) {
+            favoritesMenu.removeAll();
+            favPopup.removeAll();
 
-        List<String> addedMenus = new ArrayList<>();
-        List<Object> keys = Collections.list(favorites.keys());
-        List<Object> values = Collections.list(favorites.elements());
+            List<String> addedMenus = new ArrayList<>();
+            List<Object> keys = Collections.list(favorites.keys());
+            List<Object> values = Collections.list(favorites.elements());
 
-        for (int i = 1; i <= favorites.size() / 2; i++) {
-            Menu favoriteAppMenu;
-            MenuItem favoriteDeviceItem = new MenuItem();
-            String appPath = (String) values.get(keys.indexOf("app" + i));
-            String appDevice = (String) values.get(keys.indexOf("device" + i));
+            for (int i = 1; i <= favorites.size() / 2; i++) {
+                Menu favoriteAppMenu;
+                MenuItem favoriteDeviceItem = new MenuItem();
+                String appPath = (String) values.get(keys.indexOf("app" + i));
+                String appDevice = (String) values.get(keys.indexOf("device" + i));
 
-            // Adding Favorite App Menu
-            int appIndex = processPaths.indexOf(appPath);
-            if (addedMenus.contains(appPath)) {
-                favoriteAppMenu = (Menu) favoritesMenu.getItem(addedMenus.indexOf(appPath));
-            } else {
-                favoriteAppMenu = new Menu();
+                // Adding Favorite App Menu
+                int appIndex = processPaths.indexOf(appPath);
+                if (addedMenus.contains(appPath)) {
+                    favoriteAppMenu = (Menu) favoritesMenu.getItem(addedMenus.indexOf(appPath));
+                } else {
+                    favoriteAppMenu = new Menu();
 
-                if (appIndex == -1) {
-                    String[] filePath = appPath.split("\\\\");
-                    favoriteAppMenu.setLabel(filePath[filePath.length - 1]);
-                    favoriteAppMenu.setEnabled(false);
-                } else
-                    favoriteAppMenu.setLabel(processNames.get(appIndex));
-                favoriteAppMenu.setName(appPath);
-                addedMenus.add(appPath);
-                if (favoritesMenu.getItemCount() > 0) favoritesMenu.addSeparator();
-                favoritesMenu.add(favoriteAppMenu);
-            }
-
-            // Adding Device Menu Item
-            int deviceIndex = deviceIds.indexOf(appDevice);
-
-            if (deviceIndex == -1) {
-                favoriteDeviceItem.setLabel("Device is not found");
-                favoriteDeviceItem.setEnabled(false);
-            } else {
-                favoriteDeviceItem.setLabel(deviceNames.get(deviceIndex) + " (" + deviceSubNames.get(deviceIndex) + ")");
-                final int index = i;
-                if (appIndex != -1) favoriteDeviceItem.addActionListener(e -> {
-                    if (isEditMode) {
-                        removeFavProperty(index);
-
-                        refreshFavorites();
+                    if (appIndex == -1) {
+                        String[] filePath = appPath.split("\\\\");
+                        favoriteAppMenu.setLabel(filePath[filePath.length - 1]);
+                        favoriteAppMenu.setEnabled(false);
                     } else
-                        switchDevice(processIds.get(appIndex), deviceIds.get(deviceIndex));
-                });
-            }
+                        favoriteAppMenu.setLabel(processNames.get(appIndex));
+                    favoriteAppMenu.setName(appPath);
+                    addedMenus.add(appPath);
+                    if (favoritesMenu.getItemCount() > 0) favoritesMenu.addSeparator();
+                    favoritesMenu.add(favoriteAppMenu);
+                }
 
-            if (favoriteAppMenu.getItemCount() > 0) favoriteAppMenu.addSeparator();
-            favoriteAppMenu.add(favoriteDeviceItem);
-        }
+                // Adding Device Menu Item
+                int deviceIndex = deviceIds.indexOf(appDevice);
 
-        for (int i = 0; i < favoritesMenu.getItemCount(); i++) {
-            Menu curFavMenu = (Menu) favoritesMenu.getItem(i);
-
-            if (isEditMode) {
-                MenuItem deleteFavoriteAppItem = new MenuItem("Delete All");
-
-                makePlain(deleteFavoriteAppItem);
-
-                curFavMenu.addSeparator();
-                curFavMenu.add(deleteFavoriteAppItem);
-
-                deleteFavoriteAppItem.addActionListener(e -> {
-                    String appPath = curFavMenu.getName();
-
-                    for (int index = 1; index <= favorites.size() / 2; index++) {
-                        if (favorites.getProperty("app" + index).equals(appPath)) {
+                if (deviceIndex == -1) {
+                    favoriteDeviceItem.setLabel("Device is not found");
+                    favoriteDeviceItem.setEnabled(false);
+                } else {
+                    favoriteDeviceItem.setLabel(deviceNames.get(deviceIndex) + " (" + deviceSubNames.get(deviceIndex) + ")");
+                    final int index = i;
+                    if (appIndex != -1) favoriteDeviceItem.addActionListener(e -> {
+                        if (isEditMode) {
                             removeFavProperty(index);
-                            index--;
-                        }
-                    }
 
-                    refreshFavorites();
-                });
+                            refreshFavorites();
+                        } else
+                            switchDevice(processIds.get(appIndex), deviceIds.get(deviceIndex));
+                    });
+                }
+
+                if (favoriteAppMenu.getItemCount() > 0) favoriteAppMenu.addSeparator();
+                favoriteAppMenu.add(favoriteDeviceItem);
             }
-
-            curFavMenu.insertSeparator(0);
-            curFavMenu.addSeparator();
-        }
-
-        if (isFavMode) {
-            // Refilling Favorites Popup
-            favPopup.addSeparator();
 
             for (int i = 0; i < favoritesMenu.getItemCount(); i++) {
-                favPopup.add(favoritesMenu.getItem(i));
+                Menu curFavMenu = (Menu) favoritesMenu.getItem(i);
+
+                if (isEditMode) {
+                    MenuItem deleteFavoriteAppItem = new MenuItem("Delete All");
+
+                    makePlain(deleteFavoriteAppItem);
+
+                    curFavMenu.addSeparator();
+                    curFavMenu.add(deleteFavoriteAppItem);
+
+                    deleteFavoriteAppItem.addActionListener(e -> {
+                        String appPath = curFavMenu.getName();
+
+                        for (int index = 1; index <= favorites.size() / 2; index++) {
+                            if (favorites.getProperty("app" + index).equals(appPath)) {
+                                removeFavProperty(index);
+                                index--;
+                            }
+                        }
+
+                        refreshFavorites();
+                    });
+                }
+
+                curFavMenu.insertSeparator(0);
+                curFavMenu.addSeparator();
             }
 
-            if (favPopup.getItemCount() == 1) {
-                MenuItem emptyItem = new MenuItem("Switch mode");
+            if (isFavMode) {
+                // Refilling Favorites Popup
+                favPopup.addSeparator();
 
-                emptyItem.addActionListener(SoundMenu::switchFavMode);
+                for (int i = 0; i < favoritesMenu.getItemCount(); i++) {
+                    favPopup.add(favoritesMenu.getItem(i));
+                }
 
-                favPopup.add(emptyItem);
+                if (favPopup.getItemCount() == 1) {
+                    MenuItem emptyItem = new MenuItem("Switch mode");
+
+                    emptyItem.addActionListener(SoundMenu::switchFavMode);
+
+                    favPopup.add(emptyItem);
+                }
+
+                favPopup.addSeparator();
+            } else {
+                // Adding Edit and Remove All Menu Items
+                if (favoritesMenu.getItemCount() > 1) favoritesMenu.addSeparator();
+                favoritesMenu.add(editFavoriteItem);
+                favoritesMenu.add(clearFavoriteItem);
             }
 
-            favPopup.addSeparator();
-        } else {
-            // Adding Edit and Remove All Menu Items
-            if (favoritesMenu.getItemCount() > 1) favoritesMenu.addSeparator();
-            favoritesMenu.add(editFavoriteItem);
-            favoritesMenu.add(clearFavoriteItem);
+            favoritesMenu.insertSeparator(0);
+            favoritesMenu.addSeparator();
         }
-
-        favoritesMenu.insertSeparator(0);
-        favoritesMenu.addSeparator();
     }
 
     /**
@@ -498,6 +609,7 @@ public class SoundMenu {
         public void run() {
             refresher.doRun = false;
             refresher.interrupt();
+            if (saveFav)
             try {
                 favorites.store(new FileOutputStream("config.properties"), null);
             } catch (IOException fileNotFoundException) {

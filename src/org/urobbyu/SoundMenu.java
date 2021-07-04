@@ -50,6 +50,8 @@ public class SoundMenu {
     private static boolean saveFav = true;
     private static boolean includeOptions = true;
     private static boolean doubleClickSwitch = true;
+    private static boolean simpleMenu = false;
+    private static boolean noInfo = false;
     private static boolean showHelp = false;
 
     private static boolean isEditMode = false;
@@ -171,6 +173,8 @@ public class SoundMenu {
                 case "nf":
                 case "no":
                 case "se":
+                case "sm":
+                case "ni":
                 case "?":
                 case "help":
                     if (!s.contains(arg)) s.add(arg);
@@ -188,11 +192,15 @@ public class SoundMenu {
 
         if (s.contains("nfs") || noFav) saveFav = false;
 
-        if (s.contains("no")) includeOptions = false;
-
         if (s.contains("se") || noFav) doubleClickSwitch = false;
 
         if (s.contains("fm") || noFav) isFullMenu = true;
+
+        if (s.contains("no")) includeOptions = false;
+
+        if (s.contains("sm")) simpleMenu = true;
+
+        if (s.contains("ni")) noInfo = true;
     }
 
     /**
@@ -200,21 +208,33 @@ public class SoundMenu {
      */
     private static void showHelp() {
         System.out.println(
-            "start.cmd [-nf | (-nfl | -nfs | -se | -fm)] [-no]\n\n" +
-            "Description:\n" +
-            "   Little sound mapping java tray application.\n\n" +
-            "Argument List:\n" +
-            "   -nfl    Disables favorites file loading.\n\n" +
-            "   -nfs    Disables favorites file saving.\n\n" +
-            "   -se     Disables double-click Favorite Mode switching.\n" +
-            "           Instead it closes the application.\n\n" +
-            "   -fm     Initially loads application in Full Mode.\n\n" +
-            "   -nf     Disables favorites entirely.\n\n" +
-            "   -no     Hides 'Sound Settings' and 'SoundVolumeView'.\n\n" +
-            "Examples:\n" +
-            "   start.cmd -nf\n" +
-            "   start.cmd /nf --no\n" +
-            "   start.cmd -nfl /nfs --se -fm /no"
+            "\n/-------------------------------------------------------------\\\n" +
+            "| start.cmd [-nf | (-nfl | -nfs | -se | -fm)] [-no]           |\n" +
+            "|------------------------|Description|------------------------|\n" +
+            "|    Little sound mapping java tray application.              |\n" +
+            "|-----------------------|Argument List|-----------------------|\n" +
+            "|    -nfl    Disables favorites file loading.                 |\n" +
+            "|                                                             |\n" +
+            "|    -nfs    Disables favorites file saving.                  |\n" +
+            "|                                                             |\n" +
+            "|    -se     Disables double-click Favorite Mode switching.   |\n" +
+            "|            Instead it closes the application.               |\n" +
+            "|                                                             |\n" +
+            "|    -fm     Initially loads application in Full Mode.        |\n" +
+            "|                                                             |\n" +
+            "|    -nf     Disables favorites entirely.                     |\n" +
+            "|                                                             |\n" +
+            "|    -no     Hides 'Sound Settings' and 'SoundVolumeView'.    |\n" +
+            "|                                                             |\n" +
+            "|    -sm     Hides 'Mute' and 'Output Device' by entirely     |\n" +
+            "|            skipping this menu.                              |\n" +
+            "|                                                             |\n" +
+            "|    -ni     Hides IDs of processes and SubNames of devices.  |\n" +
+            "|-------------------------|Examples-|-------------------------|\n" +
+            "|   start.cmd -nf                                             |\n" +
+            "|   start.cmd /nf --no                                        |\n" +
+            "|   start.cmd -nfl /nfs --se -fm /no                          |\n" +
+            "\\-------------------------------------------------------------/\n"
         );
     }
 
@@ -322,20 +342,20 @@ public class SoundMenu {
 
         for (int i = 0; i < processNames.size(); i++) {
             final int pI = i;
-            Menu appMenu = new Menu(processNames.get(i) + " (" + processIds.get(i) + ")");
+            Menu appMenu = new Menu(processNames.get(i) + (noInfo ? "" : " (" + processIds.get(i) + ")"));
             Menu devicesMenu = new Menu("Output Device");
             CheckboxMenuItem muteFlag = new CheckboxMenuItem("Mute", processMuted.get(i).equals("Yes"));
 
             makePlain(muteFlag);
 
             appMenu.addSeparator();
-            devicesMenu.addSeparator();
+            if (!simpleMenu) devicesMenu.addSeparator();
 
             muteFlag.addItemListener(e -> muteApp(processIds.get(pI), e.getStateChange()));
 
             for (int j = 0; j < deviceNames.size(); j++) {
                 final int dI = j;
-                MenuItem deviceItem = new MenuItem(deviceNames.get(j) + " (" + deviceSubNames.get(j) + ")");
+                MenuItem deviceItem = new MenuItem(deviceNames.get(j) + (noInfo ? "" : " (" + deviceSubNames.get(j) + ")"));
 
                 deviceItem.setEnabled(!(processDevices.get(i).equals(deviceIds.get(j))) || isEditMode);
 
@@ -357,14 +377,18 @@ public class SoundMenu {
                         switchDevice(processIds.get(pI), deviceIds.get(dI));
                 });
 
-                devicesMenu.add(deviceItem);
+                if (simpleMenu)
+                    appMenu.add(deviceItem);
+                else
+                    devicesMenu.add(deviceItem);
             }
 
-            devicesMenu.addSeparator();
-
-            appMenu.add(devicesMenu);
-            appMenu.addSeparator();
-            appMenu.add(muteFlag);
+            if (!simpleMenu) {
+                devicesMenu.addSeparator();
+                appMenu.add(devicesMenu);
+                appMenu.addSeparator();
+                appMenu.add(muteFlag);
+            }
             appMenu.addSeparator();
             appsMenu.add(appMenu);
         }
@@ -399,7 +423,7 @@ public class SoundMenu {
                     if (appIndex == -1) {
                         String[] filePath = appPath.split("\\\\");
                         favoriteAppMenu.setLabel(filePath[filePath.length - 1]);
-                        favoriteAppMenu.setEnabled(false);
+                        favoriteAppMenu.setEnabled(isEditMode);
                     } else
                         favoriteAppMenu.setLabel(processNames.get(appIndex));
                     favoriteAppMenu.setName(appPath);
@@ -412,12 +436,12 @@ public class SoundMenu {
                 int deviceIndex = deviceIds.indexOf(appDevice);
 
                 if (deviceIndex == -1) {
-                    favoriteDeviceItem.setLabel("Device is not found");
+                    favoriteDeviceItem.setLabel("Device not found");
                     favoriteDeviceItem.setEnabled(false);
                 } else {
-                    favoriteDeviceItem.setLabel(deviceNames.get(deviceIndex) + " (" + deviceSubNames.get(deviceIndex) + ")");
+                    favoriteDeviceItem.setLabel(deviceNames.get(deviceIndex) + (noInfo ? "" : " (" + deviceSubNames.get(deviceIndex) + ")"));
                     final int index = i;
-                    if (appIndex != -1) favoriteDeviceItem.addActionListener(e -> {
+                    favoriteDeviceItem.addActionListener(e -> {
                         if (isEditMode) {
                             removeFavProperty(index);
 
